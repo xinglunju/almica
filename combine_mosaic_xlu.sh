@@ -116,8 +116,8 @@ linerestfreq='87.925238' # in GHz unit
 # When you're running the script for the first time,
 # it is recommended that you only image 1 or 2 channels around your spectral peak
 # and adjust the relative weighting based on this initial trial.
-ch_start="900"
-numch="100"
+ch_start="1"
+numch="1918"
 
 # set the cellsize and dimension for the ACA images
 # The cellsize times the imsize, which is the map size in arcsec,
@@ -139,7 +139,7 @@ uvmax=24.    # maximum uv distance, in nanosecs. 24 nanoseconds = 7.2 m = 2.4 kl
 # to plot and examine the visibility, you can use the Miriad command:
 # uvplt vis=alma_co_2to1.0.uv.miriad axis=uvdis,amp device=/xw options=nobase,avall interval=99999 nxy=1,1 line=channel,15,1,1,1
 nptsalma=3000 # number of visibility points to use when running uvrandom
-uvmaxalma=18  # maximum uv distance
+uvmaxalma=150. # maximum uv distance, in nanosecs. 150 nanoseconds = 45 m = 15 klambda
 
 
 # --------------------------------------------------------
@@ -184,13 +184,12 @@ acatp_method='clean'
 # 12m + (ACA+TP) imaging parameter
 #tsys_acatp=11000.0
 ## Final beam size is too large. Use a higher Tsys for ACA+TP to make it smaller?
-tsys_acatp=20000.0
+tsys_acatp=1000.0
 alma_cell=0.28
 alma_imsize=512
 cutoff_alma=0.01
 niters_alma=1000
 imaging_method='clean'
-#acatp_conv_f=0.03515625  # set this value to be ( alma_cell / aca_cell )^2
 acatp_conv_f=0.013611111  # set this value to be ( alma_cell / aca_cell )^2
 
 ##########################################################
@@ -213,8 +212,6 @@ then
         fits in=$path_12m$name_12m'.'$field_id'.uv.fits'  \
 	     op=uvin \
 	     out=$outname
-	     #op=uvin velocity=lsr,0.04538,961 line=velocity,1920,99.99641888875,0.10411566564247077,1 \
-         # This does not seem to make any difference... --xlu
      done
 
    # 7m data
@@ -248,7 +245,6 @@ fi
 # especially when you are combining single-dish image
 # that is not taken with ALMA TP.
 #
-
 
 if [ $if_setheaders == 'yes' ]
 then
@@ -287,7 +283,7 @@ then
    puthd in=$name_tp'.image.miriad'/crval3 value=$crval3_tp type=double
    puthd in=$name_tp'.image.miriad'/cdelt3 value=$cdelt3_tp type=double
    puthd in=$name_tp'.image.miriad'/crpix3 value=$crpix3_tp type=double
-   # The above three changes are necessary, because miriad always takes cunits as km/s
+   # The above three changes are necessary, because miriad always takes cunits as km/s when ctype3 = VELO-LSR
    # regardless of how we change the header --xlu
 
    pb="gaus("$pbfwhm_tp")"
@@ -296,25 +292,23 @@ then
    puthd in=$name_tp'.image.miriad'/pbtype \
             value=$pb type=a
 
-
    # apply a multiplication constant tp_conv_f to the TP image
    rm -rf single_input.miriad
    if [ $tp_unit_convert == 'yes' ]
    then
      maths exp="(($name_tp.image.miriad)*$tp_conv_f)" \
 	   out=single_input.miriad options=unmask
+     puthd in=single_input.miriad/bmaj value=$pbfwhm_tp,arcsec type=double
+     puthd in=single_input.miriad/bmin value=$pbfwhm_tp,arcsec type=double
+     puthd in=single_input.miriad/bpa  value=0,degree type=double
+     puthd in=single_input.miriad/bunit value='Jy/beam' type=ascii
+     puthd in=single_input.miriad/ctype3 value='VELO-LSR' type=ascii
+     puthd in=single_input.miriad/crval3 value=$crval3_tp type=double
+     puthd in=single_input.miriad/cdelt3 value=$cdelt3_tp type=double
+     puthd in=single_input.miriad/crpix3 value=$crpix3_tp type=double
    else
      cp -r $name_tp'.image.miriad' single_input.miriad
    fi
-
-   puthd in=single_input.miriad/bmaj value=$pbfwhm_tp,arcsec type=double
-   puthd in=single_input.miriad/bmin value=$pbfwhm_tp,arcsec type=double
-   puthd in=single_input.miriad/bpa  value=0,degree type=double
-   puthd in=single_input.miriad/bunit value='Jy/beam' type=ascii
-   puthd in=single_input.miriad/ctype3 value='VELO-LSR' type=ascii
-   puthd in=single_input.miriad/crval3 value=$crval3_tp type=double
-   puthd in=single_input.miriad/cdelt3 value=$cdelt3_tp type=double
-   puthd in=single_input.miriad/crpix3 value=$crpix3_tp type=double
 
 fi
 
@@ -333,7 +327,6 @@ then
          object=gaussian \
          spar=1,0,0,$pbfwhm_tp,$pbfwhm_tp,0
 
-
    for field_id in $fields_7m
      do
         # Creat template ACA maps for regriding TP maps
@@ -342,9 +335,10 @@ then
 	    echo $ch
         invert vis=$name_7m'.'$field_id'.uv.miriad'   \
            imsize=$aca_imsize cell=$aca_cell options=double \
-           map=single_input.aca_$field_id.temp.miriad beam=temp.beam line=$ch
+           map=single_input.aca_$field_id.temp.miriad beam=temp.beam slop=1,zero
+		# Use slop=1,zero --xlu
 
-        # Added by xlu: change the spectral info in header. From topo () to lsr
+        # Added by xlu: change the spectral info in header. From topo (?) to lsr
         puthd in=single_input.aca_$field_id.temp.miriad/ctype3 value='VELO-LSR' type=ascii
         puthd in=single_input.aca_$field_id.temp.miriad/specsys value='LSRK' type=ascii
 
@@ -352,7 +346,7 @@ then
         rm -rf single_input.aca_$field_id.regrid.miriad       
         regrid in=single_input.miriad tin=single_input.aca_$field_id.temp.miriad \
            out=single_input.aca_$field_id.regrid.miriad \
-           project=sin #axes=3
+           project=sin
 
         # Deconvolve the TP Map
 	    rm -rf single_input.aca_$field_id.deconv.miriad
@@ -367,7 +361,6 @@ then
            mode=clean out=single_input.aca_$field_id.restor.miriad
         # Use the following comand to check the maps --xlu
         # cgdisp in=single_input.aca_0.restor.miriad device=/xs nxy=2,2 options=3pixel,3value
-
         rm -rf single_input.aca_$field_id.residual.miriad
         restor map=single_input.aca_$field_id.regrid.miriad beam=tp_beam \
            model=single_input.aca_$field_id.deconv.miriad \
@@ -379,11 +372,6 @@ then
         demos map=single_input.aca_$field_id.deconv.miriad vis=$name_7m'.'$field_id'.uv.miriad' \
            out=temp
 	    mv temp1 single_input.aca_$field_id.demos.miriad
-
-        # Regrid RA/Dec of the demos image
-        #regrid in=temp1 tin=single_input.aca_$field_id.temp.miriad \
-        #   out=single_input.aca_$field_id.demos.miriad axes=1,2
-        #rm -rf temp1
      done
 
      # clean up
@@ -407,28 +395,18 @@ then
             gauss=false out=uv_random.miriad
    # Check gauss from true to false to have a more realistic uv sampling?? -- xlu
    # Also change uvmax to 24 (nanosecs), which is 7 m? --xlu
-
+   
    # Plot the uv distribution for a sanity check
    #uvplt vis=uv_random.miriad axis=uc,vc device=/xw options=nobase,avall interval=99999 nxy=1,1 line=channel,15,1,1,1
 
    for field_id in $fields_7m
      do
-
-#        rm -rf single_input.aca_$field_id'.regrid.miriad'
-#        regrid in=single_input.aca_$field_id.demos.miriad \
-#               tin=single_input.alma_$field_id.temp.miriad \
-#               out=single_input.alma_$field_id.regrid.miriad \
-#               project=sin
-
 	    rm -rf single_input.aca_$field_id.uvmodel.miriad
-#        uvmodel vis=uv_random.miriad model=single_input.aca_$field_id.demos.miriad \
-#                'select=uvrange(0,13)' options=replace,imhead \
-#                out=single_input.aca_$field_id.uvmodel.miriad
         uvmodel vis=uv_random.miriad model=single_input.aca_$field_id.demos.miriad \
              options=replace,imhead \
              out=single_input.aca_$field_id.uvmodel.miriad "select=uvnrange(0,$uvmax)"
-        ## Change uvrange to uvnrange --xlu
-        # Use the following command to check the uv distributions
+        ## Change uvrange to uvnrange, to use nanosec unit --xlu
+        # Use the following command to check the uv distributions --xlu
         # uvplt vis=single_input.aca_0.uvmodel.miriad axis=uc,vc device=/xw options=nobase,avall interval=99999 nxy=1,1 line=channel,1,1,1,1
 
         rm -rf temp
@@ -457,8 +435,7 @@ then
      rm -rf $outname
      uvputhd vis=single_input.aca_$field_id.uvmodel.miriad hdvar=systemp type=r length=1 \
 		 varval=$tsys_tp out=$outname
-	 #puthd in=$outname/jyperk value=1.0 type=r
-	 puthd in=$outname/jyperk value=40.7 type=r # change to 40.7, to be consistent with 7M data
+	 puthd in=$outname/jyperk value=40.7 type=r # change to 40.7, to be consistent with 7M data --xlu
 
      # Check the result of uvputhd --xlu
      # varplt vis=single_input.aca_$field_id.uvmodel.rewt.miriad log=test.log.txt xaxis=time yaxis=systemp
@@ -502,10 +479,11 @@ then
     #uvlist vis=aca_hnco.0.uv.miriad options=full,variables
     ## 2. Plot the uv plane, make sure the two uv datasets overlap well
     #uvplt vis=aca_hnco.0.uv.miriad  device=1/xs axis=uc,vc options=nobase xrange=-5,5 yrange=-5,5
-    #uvplt vis=single_input.aca_0.uvmodel.rewt.miriad device=2/xs axis=uc,vc options=nobase,nanosec xrange=-5,5 yrange=-5,5
+    #uvplt vis=single_input.aca_0.uvmodel.rewt.miriad device=2/xs axis=uc,vc options=nobase xrange=-5,5 yrange=-5,5
+    # Use options=nanosec to plot the uv plane in nanoseconds
     ## 3. Check the amplitude, make sure the two datasets have similar amp where they overlap
-    #uvamp vis=aca_hnco.0.uv.miriad device=1/xs line=channel,1,60,1,1 bin=20,6
-    #uvamp vis=single_input.aca_0.uvmodel.rewt.miriad device=2/xs line=channel,1,60,1,1 bin=20,6
+    #uvamp vis=aca_hnco.0.uv.miriad device=1/xs line=channel,1,960,1,1 bin=20,6
+    #uvamp vis=single_input.aca_0.uvmodel.rewt.miriad device=2/xs line=channel,1,960,1,1 bin=20,6
 
 fi
 ##########################################################
@@ -516,14 +494,11 @@ fi
 if [ $if_acaim == 'yes' ]
 then
 
-
    rm -rf acatp.map
    rm -rf acatp.beam
-   #invert "vis=./intermediate_vis/*" options=systemp,double,mosaic \
-   #	  map=acatp.map beam=acatp.beam cell=$aca_cell imsize=$aca_imsize robust=2.0
-   ## The wildcard does not work, so I used a file list -- xlu 23/1/5
+   ## The wildcard does not work, so we use a file list -- xlu 23/1/5
    invert vis=@vislist.txt options=systemp,double,mosaic \
-	  map=acatp.map beam=acatp.beam cell=$aca_cell imsize=$aca_imsize robust=0.0
+	  map=acatp.map beam=acatp.beam cell=$aca_cell imsize=$aca_imsize robust=0.0 slop=1,zero
 
    rm -rf acatp.model
    if [ $acatp_method == 'clean' ]
@@ -543,10 +518,6 @@ then
    rm -rf acatp.beam.fits
    fits in=acatp.beam op=xyout out=acatp.beam.fits
    fits in=acatp.clean op=xyout out=acatp.clean.fits
-
-   ####
-   # Beam size is 60 arcsec, which is too large!
-   ####
 
 fi
 ##########################################################
@@ -569,20 +540,19 @@ fi
 ##########################################################
 
 
+
 ##### Converting ACA+TP image to 12m visibilities ########
 if [ $if_tp2almavis == 'yes' ]
 then
 
    rm -rf uv_random.miriad
-   uvrandom npts=$nptsalma freq=$linerestfreq inttime=10 uvmax=$uvmaxalma nchan=$numch \
-        gauss=true out=uv_random.miriad
+   uvrandom npts=$nptsalma freq=$linerestfreq inttime=10.0808 uvmax=$uvmaxalma nchan=$numch \
+        gauss=false out=uv_random.miriad
+   # Use gauss=false --xlu
+   # Plot the uv distribution for a sanity check
+   #uvplt vis=uv_random.miriad axis=uc,vc device=/xw options=nobase,avall interval=99999 nxy=1,1 line=channel,15,1,1,1
 
-   # Temparily change the 'ch' definiation here
-   # Because the TM1 data have less channels than 7M/TP (1920 vs 2048)
-   # So the channel indices are different
-   # Ultimately, we need to regrid the TM1/7M/TP data to a common frequency axis beforehand
-   # --xlu
-   ch=channel,80,850,1,1
+   #for field_id in ${fields_12m[@]} # Use bash array to finish all fields; fields_12m=(153 154 ...) --xlu
    for field_id in $fields_12m
      do
 
@@ -590,12 +560,12 @@ then
     	rm -rf temp.beam
         invert vis=$name_12m'.'$field_id'.uv.miriad'   \
                imsize=$alma_imsize cell=$alma_cell \
-               map=single_input.alma_$field_id.temp.miriad beam=temp.beam line=$ch
+               map=single_input.alma_$field_id.temp.miriad beam=temp.beam slop=1,zero
+        # Use slop=1,zero --xlu
 
         # applying ALMA primary beam to ACA+TP clean model
 	    rm -rf acatp.demos
 	    rm -rf acatp.demos1
-
 	    if [ $acatp_method == 'clean' ]
         then
             demos map=acatp.model vis=$name_12m'.'$field_id'.uv.miriad' out=acatp.demos
@@ -620,7 +590,7 @@ then
 	    # simulate visibilities
 	    rm -rf single_input.alma_$field_id.uvmodel.miriad
         uvmodel vis=uv_random.miriad model=single_input.alma_$field_id.regrid.miriad \
-		    options=replace,imhead "select=uvrange(0,$uvmaxalma)" \
+		    options=replace,imhead "select=uvnrange(0,$uvmaxalma)" \
             out=single_input.alma_$field_id.uvmodel.miriad
 
         rm -rf temp
@@ -656,7 +626,7 @@ then
          rm -rf $outname
          uvputhd vis=single_input.alma_$field_id.uvmodel.miriad hdvar=systemp type=r length=1 \
                  varval=$tsys_acatp out=$outname
-         puthd in=$outname/jyperk value=1.0 type=r
+         puthd in=$outname/jyperk value=40.7 type=r
 
          pb="gaus("$pbfwhm_12m")"
          puthd in=$outname/telescop \
@@ -688,7 +658,6 @@ then
      do
        cp -r $name_12m'.'$field_id'.uv.miriad' ./final_vis/'alma.'$field_id'.miriad'
        cp -r single_input.alma_$field_id'.uvmodel.rewt.miriad' ./final_vis/'aca.'$field_id'.miriad'
-
      done
 
 fi
@@ -703,7 +672,8 @@ then
    rm -rf combined.map
    rm -rf combined.beam
    invert vis=@finallist.txt options=systemp,double,mosaic \
-          map=combined.map beam=combined.beam cell=$alma_cell imsize=$alma_imsize robust=0.0
+          map=combined.map beam=combined.beam cell=$alma_cell imsize=$alma_imsize robust=0.0 slop=1,zero
+   # Use slop=1,zero, and use an ASCII file list -- xlu
 
    rm -rf combined.model
    if [ $imaging_method == 'clean' ]

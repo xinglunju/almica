@@ -499,7 +499,6 @@ then
    ## The wildcard does not work, so we use a file list -- xlu 23/1/5
    invert vis=@vislist.txt options=systemp,double,mosaic \
 	  map=acatp.map beam=acatp.beam cell=$aca_cell imsize=$aca_imsize robust=0.0 slop=1,zero
-   ## Somehow the order of file names in the text file matters... have to put the singleinput files at the beginning -- xlu 23/7/7
 
    rm -rf acatp.model
    if [ $acatp_method == 'clean' ]
